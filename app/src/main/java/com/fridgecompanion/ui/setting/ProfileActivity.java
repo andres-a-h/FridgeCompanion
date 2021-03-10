@@ -16,6 +16,7 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -27,6 +28,11 @@ import com.cloudinary.android.preprocess.DimensionsValidator;
 import com.cloudinary.android.preprocess.ImagePreprocessChain;
 import com.fridgecompanion.BundleKeys;
 import com.fridgecompanion.FirebaseDatasource;
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.Task;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.ValueEventListener;
 import com.soundcloud.android.crop.Crop;
 
 import com.fridgecompanion.R;
@@ -60,9 +66,12 @@ public class ProfileActivity extends AppCompatActivity {
     };
     private static final int OPTIONS_TAKE_PHOTO = 0;
     private static final int OPTIONS_FROM_GALLERY = 1;
+    EditText last;
+    EditText first;
 
     //For cloud storage
     private String ProfilePicUrl;
+    private String location;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -79,6 +88,31 @@ public class ProfileActivity extends AppCompatActivity {
                 displayCameraOptions(view);
             }
         });
+        first = (EditText) findViewById(R.id.first_name_text_id);
+        last = (EditText) findViewById(R.id.last_name_text_id);
+
+        try {
+            FirebaseDatasource firebaseDatasource = new FirebaseDatasource(getApplicationContext());
+            firebaseDatasource.getUserReference().child("name").addListenerForSingleValueEvent(new ValueEventListener() {
+                @Override
+                public void onDataChange(DataSnapshot dataSnapshot) {
+                    if(dataSnapshot.exists()){
+                        String[] strings = dataSnapshot.getValue(String.class).split("\\s+");
+                        if(strings.length == 2){
+                            first.setText(strings[0]);
+                            last.setText(strings[1]);
+                        }
+                    }
+                }
+
+                @Override
+                public void onCancelled(DatabaseError databaseError) {
+
+                }
+            });
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     @Override
@@ -105,15 +139,16 @@ public class ProfileActivity extends AppCompatActivity {
                 beginCrop(ProfilePicUri);
                 break;
             case REQUEST_CODE_FROM_GALLERY:
-                beginGallery(ProfilePicUri, data);
+                ProfilePicUri = data.getData();
+                beginCrop(ProfilePicUri);
                 break;
             case Crop.REQUEST_CROP:
                 handleCrop(resultCode, data);
                 if (isTakenFromCamera) {
-                    File f = new File(ProfilePicUri.getPath());
-                    if (f.exists()) {
-                        f.delete();
-                    }
+                   // File f = new File(ProfilePicUri.getPath());
+//                    if (f.exists()) {
+//                        f.delete();
+                    //}
                 }
                 break;
         }
@@ -135,23 +170,29 @@ public class ProfileActivity extends AppCompatActivity {
         } catch (Exception e) {
             e.printStackTrace();
         }
-        ProfilePicUri = firebaseDatasource.getProfilePicFromUser();
-        Log.d("hz", ProfilePicUri.toString());
 
-        if(ProfilePicUri==null){
-            // Default profile photo if no photo saved before
-            ProfilePicButton.setImageResource(R.drawable.stock_user_picture);
-            Log.d(TAG, "ERROR: Couldn't find the saved image");
-        }
-        else{
-            // Load saved profile photo
-            //FileInputStream fis = openFileInput(profilePicFileName);
-            //Bitmap bmap = BitmapFactory.decodeStream(fis);
-            Log.d("hz1", ProfilePicUri.toString());
-            //Bitmap bmap = MediaStore.Images.Media.getBitmap(this.getContentResolver() , ProfilePicUri);
+        firebaseDatasource.getProfilePicUrlReference().get().addOnCompleteListener(new OnCompleteListener<DataSnapshot>() {
+            @Override
+            public void onComplete(@NonNull Task<DataSnapshot> task) {
+                if (!task.isSuccessful()) {
+                }
+                else {
+                    String url = (String) task.getResult().getValue();
+                    if(url==null){
+                        // Default profile photo if no photo saved before
+                        ProfilePicButton.setImageResource(R.drawable.stock_user_picture);
+                        Log.d(TAG, "ERROR: Couldn't find the saved image");
+                    }
+                    else{
+                        // Load saved profile photo
+                        Picasso.get().load(url).into(ProfilePicButton);
 
-            Picasso.get().load(ProfilePicUri).into(ProfilePicButton);
-        }
+                    }
+                }
+            }
+        });
+
+
 //        try {
 //            // Load saved profile photo
 //            //FileInputStream fis = openFileInput(profilePicFileName);
@@ -177,16 +218,16 @@ public class ProfileActivity extends AppCompatActivity {
      */
     private void saveProfilePicture() {
         // Save profile photo to internal storage
-        ProfilePicButton.buildDrawingCache();
-        Bitmap bmap = ProfilePicButton.getDrawingCache();
-        try {
-            FileOutputStream fos = openFileOutput(getString(R.string.profile_photo_file_name), MODE_PRIVATE);
-            bmap.compress(Bitmap.CompressFormat.JPEG, 100, fos);
-            fos.flush();
-            fos.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+//        ProfilePicButton.buildDrawingCache();
+//        Bitmap bmap = ProfilePicButton.getDrawingCache();
+//        try {
+//            FileOutputStream fos = openFileOutput(getString(R.string.profile_photo_file_name), MODE_PRIVATE);
+//            bmap.compress(Bitmap.CompressFormat.JPEG, 100, fos);
+//            fos.flush();
+//            fos.close();
+//        } catch (IOException e) {
+//            e.printStackTrace();
+//        }
         // Save to Cloud
         MediaManager.get().upload(ProfilePicUri).unsigned("fridgeupload").preprocess(
                 ImagePreprocessChain.limitDimensionsChain(300,300)
@@ -203,6 +244,7 @@ public class ProfileActivity extends AppCompatActivity {
 
                         tempUrl = "https://res.cloudinary.com/foreverzhang98/image/upload/a_90/"+tempUrl.substring(54);
                         ProfilePicUrl = tempUrl;
+                        Log.d("hz",ProfilePicUrl);
                         Log.d("checkstore",tempUrl);
                         //attach food to firebase here
                         FirebaseDatasource firebaseDatasource = null;
@@ -218,6 +260,11 @@ public class ProfileActivity extends AppCompatActivity {
                     @Override
                     public void onReschedule(String requestId, ErrorInfo error) {}
                 }).startNow(getApplicationContext());
+        String last_name = last.getText().toString();
+        String first_name = first.getText().toString();
+        saveUserName(first_name, last_name);
+        Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show();
+        finish();
 
     }
 
@@ -258,28 +305,29 @@ public class ProfileActivity extends AppCompatActivity {
 
     private void handleCrop(int resultCode, Intent result) {
         if (RESULT_OK == resultCode) {
+            ProfilePicUri = Crop.getOutput(result);
             ProfilePicButton.setImageURI(Crop.getOutput(result));
         } else if (Crop.RESULT_ERROR == resultCode) {
             Toast.makeText(this, Crop.getError(result).getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
 
-    private void beginGallery(Uri source,Intent data) {
-        try {
-            ProfilePicUri = data.getData();
-            InputStream inputStream = getContentResolver().openInputStream(ProfilePicUri);
-            Bitmap bitmap = BitmapFactory.decodeStream(inputStream);
-            ProfilePicButton.setImageBitmap(bitmap);
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        }
-    }
+//    private void beginGallery(Uri source,Intent data) {
+//        try {
+//            ProfilePicUri = data.getData();
+//            InputStream inputStream = getContentResolver().openInputStream(ProfilePicUri);
+//            Bitmap bitmap = BitmapFactory.decodeStream(inputStream);
+//            ProfilePicButton.setImageBitmap(bitmap);
+//        } catch (FileNotFoundException e) {
+//            e.printStackTrace();
+//        }
+//    }
 
     private void takePicture() {
         Intent intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
         // Construct temporary image path and name to save the taken photo
         ContentValues values = new ContentValues(1);
-        values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpg");
+        values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
         ProfilePicUri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
         intent.putExtra(MediaStore.EXTRA_OUTPUT, ProfilePicUri);
         intent.putExtra("return_data", true);
@@ -294,6 +342,11 @@ public class ProfileActivity extends AppCompatActivity {
     private void fromGallery() {
         Intent intent = new Intent(Intent.ACTION_PICK);
         intent.setType("image/*");
+        Intent photoPickerIntent = new Intent(Intent.ACTION_PICK);
+        photoPickerIntent.setType("image/*");
+        intent.putExtra(MediaStore.EXTRA_OUTPUT, ProfilePicUri);
+        intent.putExtra("return-data", true);
+
         try {
             startActivityForResult(intent, REQUEST_CODE_FROM_GALLERY);
         } catch (ActivityNotFoundException e) {
@@ -302,11 +355,7 @@ public class ProfileActivity extends AppCompatActivity {
         isTakenFromCamera = false;
     }
     //Save names
-    public void saveUserName(){
-        EditText last = (EditText) findViewById(R.id.last_name_text_id);
-        String last_name = last.getText().toString();
-        EditText first = (EditText) findViewById(R.id.first_name_text_id);
-        String first_name = first.getText().toString();
+    public void saveUserName(String first_name, String last_name){
         FirebaseDatasource firebaseDatasource = null;
         try {
             firebaseDatasource = new FirebaseDatasource(getApplicationContext());
@@ -314,13 +363,16 @@ public class ProfileActivity extends AppCompatActivity {
             e.printStackTrace();
         }
         firebaseDatasource.setUserNames(first_name,last_name);
+
     }
     public void onProfileSaveButtonClicked(View view) {
-        saveProfilePicture();
-        saveUserName();
-
-        Toast.makeText(this, "Saved", Toast.LENGTH_SHORT).show();
-        finish();
+        String last_name = last.getText().toString();
+        String first_name = first.getText().toString();
+        if(!first_name.trim().isEmpty() && !last_name.trim().isEmpty()){
+            saveProfilePicture();
+        }else{
+            Toast.makeText(this, "Missing Names", Toast.LENGTH_SHORT).show();
+        }
     }
 
     public void onProfileCancelButtonClicked(View view) {

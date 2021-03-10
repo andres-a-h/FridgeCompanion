@@ -1,10 +1,17 @@
 package com.fridgecompanion.ui.setting;
 
 import android.content.Intent;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ImageView;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.preference.CheckBoxPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
@@ -26,6 +33,8 @@ public class SettingFragment extends PreferenceFragmentCompat {
         if (getContext() != null) {
             PreferenceManager.setDefaultValues(getContext(), R.xml.preferences, false);
         }
+
+
         Preference myPref = (Preference) findPreference("user_profile");
         myPref.setOnPreferenceClickListener(new Preference.OnPreferenceClickListener() {
             @Override
@@ -35,6 +44,13 @@ public class SettingFragment extends PreferenceFragmentCompat {
                 return true;
             }
         });
+
+
+//        Preference p = findPreference("custom_header");
+//        ImageView iv = (ImageView) getView().findViewById(R.id.profile_pic);
+//        TextView tv = (TextView)getView().findViewById(R.id.username_text);
+//        tv.setText("test");
+
 
         // Logout button
         Preference button = findPreference(getString(R.string.action_logout));
@@ -46,5 +62,13 @@ public class SettingFragment extends PreferenceFragmentCompat {
                 return true;
             }
         });
+    }
+
+    @Override
+    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
+        View view =  super.onCreateView(inflater, container, savedInstanceState);
+        view.setBackgroundColor(Color.WHITE);
+        return view;
+
     }
 }
